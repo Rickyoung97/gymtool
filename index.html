@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>Fitness Tracker — Full Body A & B</title>
+<style>
+:root{--bg:#0b0d10;--card:#151920;--card2:#1b2028;--text:#f4f6f8;--muted:#9ca5b1;--accent:#d8ad55;--line:#2b313b;--ok:#6bc48b;--danger:#e36d6d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:900px;margin:auto;padding:18px 14px 50px}.hero{padding:8px 2px 18px}.hero h1{margin:0 0 5px;font-size:28px}.hero p{margin:0;color:var(--muted)}
+.tabs{display:flex;gap:8px;margin:8px 0 14px}.tab{flex:1;border:1px solid var(--line);background:var(--card);color:var(--text);padding:12px;border-radius:12px;font-weight:700;cursor:pointer;transition:all .2s}.tab.active{background:var(--accent);color:#111;border-color:var(--accent)}
+.panel{display:none}.panel.active{display:block}.toolbar,.history-card,.exercise{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}.input,select,textarea{width:100%;background:#0f1217;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit}textarea{min-height:70px;resize:vertical}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.exercise h3{margin:0;font-size:18px}.exercise .meta{color:var(--muted);font-size:13px;margin:3px 0}.exhead{display:flex;justify-content:space-between;gap:10px;align-items:start}.visual{color:var(--accent);text-decoration:none;font-size:13px;white-space:nowrap}
+/* Nieuwe styling voor radio button varianten */
+.options{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
+.radio-lbl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;background:#0f1217;padding:6px 12px;border-radius:99px;border:1px solid var(--line);transition:all .2s}
+.radio-lbl:has(input:checked){border-color:var(--accent);color:var(--accent);background:rgba(216, 173, 85, 0.1)}
+input[type="radio"]{accent-color:var(--accent);margin:0;cursor:pointer}
+.sets{display:grid;gap:8px}.setrow{display:grid;grid-template-columns:50px 1fr 1fr;gap:8px;align-items:center}.setnum{color:var(--muted);font-weight:700}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.btn{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:10px;padding:10px 13px;font-weight:700;cursor:pointer;transition:all .2s}.btn.primary{background:var(--accent);color:#111;border-color:var(--accent)}.btn.danger{color:#ff9b9b;border-color:rgba(255,155,155,0.2);background:transparent}
+.small{font-size:12px;color:var(--muted)}.history-card h3{margin:0 0 6px}.history-card .row{display:flex;justify-content:space-between;gap:10px}.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#242b35;color:#dbe0e6;font-size:12px}.empty{text-align:center;color:var(--muted);padding:20px}.section-title{margin:18px 2px 10px;display:flex;justify-content:space-between;align-items:flex-end}
+@media(max-width:560px){.grid{grid-template-columns:1fr}.setrow{grid-template-columns:45px 1fr 1fr}.hero h1{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>🏋️ Fitness Tracker</h1>
+    <p>2× per week · Auto-save actief · elke sessie start met treadmill</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="A">Full Body A</button>
+    <button class="tab" data-tab="B">Full Body B</button>
+    <button class="tab" data-tab="history">Historie</button>
+  </div>
+
+  <section id="A" class="panel active"></section>
+  <section id="B" class="panel"></section>
+  <section id="history" class="panel"></section>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+// Data array: [Naam, Spiergroep, Richtlijn, Link, [Varianten (optioneel)]]
+const plans={
+ A:[
+  ["Leg press","Benen","3×8–12","https://www.google.com/search?tbm=isch&q=leg+press+exercise",["Standaard","Voeten hoog","Voeten laag","Breed","Smal","Unilateraal"]],
+  ["Chest press","Borst","3×8–12","https://www.google.com/search?tbm=isch&q=chest+press+machine+exercise",["Machine","Dumbbells","Barbell","Smith-machine"]],
+  ["Lat pulldown","Rug","3×8–12","https://www.google.com/search?tbm=isch&q=lat+pulldown+exercise",["Brede greep","Smalle V-greep","Onderhands (Supinatie)"]],
+  ["Seated shoulder press","Schouders","2×8–12","https://www.google.com/search?tbm=isch&q=seated+shoulder+press+exercise",["Dumbbells","Machine","Smith-machine"]],
+  ["Leg curl","Hamstrings","2×10–15","https://www.google.com/search?tbm=isch&q=seated+leg+curl+exercise",["Zittend","Liggend","Staand"]],
+  ["Cable triceps pushdown","Triceps","2×10–15","https://www.google.com/search?tbm=isch&q=cable+triceps+pushdown",["Touw","Rechte stang","V-bar","EZ-stang"]],
+  ["Cable biceps curl","Biceps","2×10–15","https://www.google.com/search?tbm=isch&q=cable+biceps+curl",["Rechte stang","Touw (Hammer)","EZ-stang","Losse handgrepen"]]
+ ],
+ B:[
+  ["Goblet squat","Benen","3×8–12","https://www.google.com/search?tbm=isch&q=goblet+squat+exercise",["Dumbbell","Kettlebell","Met hielverhoging"]],
+  ["Incline chest press","Borst","3×8–12","https://www.google.com/search?tbm=isch&q=incline+chest+press+exercise",["Dumbbells","Barbell","Machine"]],
+  ["Seated cable row","Rug","3×8–12","https://www.google.com/search?tbm=isch&q=seated+cable+row+exercise",["Brede stang","Smalle V-greep","Unilateraal"]],
+  ["Lateral raise","Schouders","2×10–15","https://www.google.com/search?tbm=isch&q=lateral+raise+exercise",["Dumbbells (Staand)","Dumbbells (Zittend)","Kabels"]],
+  ["Romanian deadlift","Hamstrings/glutes","2×8–12","https://www.google.com/search?tbm=isch&q=romanian+deadlift+exercise",["Barbell","Dumbbells","Single-leg (Unilateraal)"]],
+  ["Cable triceps extension","Triceps","2×10–15","https://www.google.com/search?tbm=isch&q=cable+triceps+extension",["Overhead (Touw)","Pushdown (Stang)","Unilateraal (Kabel)"]],
+  ["Hammer curl","Biceps","2×10–15","https://www.google.com/search?tbm=isch&q=hammer+curl+exercise",["Dumbbells (Tegelijk)","Dumbbells (Om en om)","Touw (Kabel)"]]
+ ]
+};
+
+const KEY="fitnessTrackerV2"; // Sleutel geüpdatet
+const DRAFT_KEY="fitnessDraft_";
+let current="A";
+const today=()=>new Date().toISOString().slice(0,10);
+const load=()=>JSON.parse(localStorage.getItem(KEY)||"[]");
+const save=x=>localStorage.setItem(KEY,JSON.stringify(x));
+
+// Global event listeners voor auto-save (Concepten)
+document.addEventListener("input", e => { const p = e.target.closest(".panel"); if(p && (p.id==="A"||p.id==="B")) saveDraft(p.id); });
+document.addEventListener("change", e => { const p = e.target.closest(".panel"); if(p && (p.id==="A"||p.id==="B")) saveDraft(p.id); });
+
+function renderPlan(type){
+ const p=document.getElementById(type);
+ p.innerHTML=`<div class="toolbar">
+   <div class="grid">
+    <div><label>Datum training</label><input class="input" id="${type}-date" type="date" value="${today()}"></div>
+    <div><label>Treadmill warming-up (minuten)</label><input class="input" id="${type}-run" type="number" inputmode="decimal" min="0" step="0.5" value="10"></div>
+   </div>
+   <div style="margin-top:10px"><label>Algemene notities</label><textarea id="${type}-notes" placeholder="Bijv. energie, bijzonderheden, techniek..."></textarea></div>
+ </div>
+ <div class="section-title">
+    <h2 style="margin:0">Krachttraining ${type}</h2>
+    <div class="small">Concept slaat automatisch op 💾</div>
+ </div>
+ <div id="${type}-exercises"></div>
+ <div class="actions">
+    <button class="btn primary" onclick="finish('${type}')">✓ Training opslaan</button>
+    <button class="btn danger" onclick="resetForm('${type}')">Formulier & concept wissen</button>
+ </div>`;
+ 
+ const box=document.getElementById(type+"-exercises");
+ plans[type].forEach((e,i)=>box.insertAdjacentHTML("beforeend",exerciseHTML(type,e,i)));
+ restoreDraft(type);
+}
+
+function exerciseHTML(type,e,i){
+ let optionsHTML = "";
+ if(e[4] && e[4].length > 0) {
+   optionsHTML = `<div class="options">` + e[4].map((opt, oIdx) => `<label class="radio-lbl"><input type="radio" name="${type}-var-${i}" value="${opt}" ${oIdx===0?'checked':''}> ${opt}</label>`).join("") + `</div>`;
+ }
+
+ return `<div class="exercise" data-ex="${i}">
+  <div class="exhead"><div><h3>${i+1}. ${e[0]}</h3><div class="meta">${e[1]} · richtlijn ${e[2]}</div></div><a class="visual" href="${e[3]}" target="_blank" rel="noopener">📷 Visuals</a></div>
+  ${optionsHTML}
+  <div class="sets" id="${type}-sets-${i}">${setHTML(0)}${setHTML(1)}</div>
+  <div class="actions">
+    <button class="btn" onclick="addSet('${type}',${i})">＋ Set toevoegen</button>
+    <button class="btn danger" onclick="removeSet('${type}',${i})">− Laatste set</button>
+  </div>
+ </div>`;
+}
+
+function setHTML(n){return `<div class="setrow"><div class="setnum">Set ${n+1}</div><input class="input kg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="kg"><input class="input reps" type="number" inputmode="numeric" min="0" step="1" placeholder="herhalingen"></div>`}
+
+function addSet(t,i){
+    document.getElementById(`${t}-sets-${i}`).insertAdjacentHTML("beforeend",setHTML(document.getElementById(`${t}-sets-${i}`).children.length));
+    saveDraft(t);
+}
+
+function removeSet(t,i){
+    let b=document.getElementById(`${t}-sets-${i}`);
+    if(b.children.length>2) { b.lastElementChild.remove(); saveDraft(t); }
+}
+
+// Data verzamelen uit de velden. isDraft bepaalt of lege velden bewaard moeten blijven.
+function collect(t, isDraft=false){
+ const out={type:t, date:document.getElementById(t+"-date").value, run:document.getElementById(t+"-run").value, notes:document.getElementById(t+"-notes").value, exercises:[]};
+ document.querySelectorAll(`#${t}-exercises .exercise`).forEach((card,i)=>{
+  let variant = "";
+  const checkedRadio = card.querySelector(`input[type="radio"]:checked`);
+  if(checkedRadio) variant = checkedRadio.value;
+
+  let sets = [...card.querySelectorAll(".setrow")].map((r,j)=>({set:j+1,kg:r.querySelector(".kg").value,reps:r.querySelector(".reps").value}));
+  if(!isDraft) sets = sets.filter(s=>s.kg!==""||s.reps!=="");
+  
+  out.exercises.push({name:plans[t][i][0], variant, sets});
+ });
+ return out;
+}
+
+// Draft functies
+function saveDraft(t){ localStorage.setItem(DRAFT_KEY+t, JSON.stringify(collect(t, true))); }
+function restoreDraft(t){
+ const draft = JSON.parse(localStorage.getItem(DRAFT_KEY+t));
+ if(!draft) return;
+ document.getElementById(t+"-date").value = draft.date || today();
+ document.getElementById(t+"-run").value = draft.run !== undefined ? draft.run : "10";
+ document.getElementById(t+"-notes").value = draft.notes || "";
+ 
+ draft.exercises.forEach((ex, i) => {
+  if(ex.variant) {
+      const r = document.querySelector(`input[name="${t}-var-${i}"][value="${ex.variant}"]`);
+      if(r) r.checked = true;
+  }
+  const container = document.getElementById(`${t}-sets-${i}`);
+  container.innerHTML = ""; // Wis default 2 sets, laad layout uit draft
+  ex.sets.forEach((s, j) => {
+      container.insertAdjacentHTML("beforeend", setHTML(j));
+      const row = container.children[j];
+      row.querySelector(".kg").value = s.kg || "";
+      row.querySelector(".reps").value = s.reps || "";
+  });
+ });
+}
+
+function resetForm(t){
+ if(confirm("Weet je zeker dat je alle ingevulde data in dit scherm wilt wissen?")){
+  localStorage.removeItem(DRAFT_KEY+t);
+  renderPlan(t);
+ }
+}
+
+function finish(t){
+ const d=collect(t, false);
+ if(!d.date){alert("Vul eerst een datum in.");return}
+ let h=load();h.unshift(d);save(h);
+ localStorage.removeItem(DRAFT_KEY+t); // Verwijder de draft na opslaan
+ alert("Training definitief opgeslagen in je browser.");
+ renderPlan(t); // Reset scherm
+ renderHistory();
+}
+
+function renderHistory(){
+ const p=document.getElementById("history"),h=load();
+ p.innerHTML=`<div class="toolbar"><h2 style="margin:0 0 6px">Eerdere trainingen</h2><div class="small">${h.length} training(en) lokaal opgeslagen.</div><div class="actions"><button class="btn primary" onclick="exportXLSX()">⬇ Excel (.xlsx)</button><button class="btn" onclick="exportTXT()">⬇ Tekst (.txt)</button><button class="btn danger" onclick="clearHistory()">Alles wissen</button></div></div>`;
+ if(!h.length){p.innerHTML+=`<div class="history-card empty">Nog geen trainingen opgeslagen.</div>`;return}
+ h.forEach((x,idx)=>{let total=x.exercises.reduce((a,e)=>a+e.sets.length,0);p.innerHTML+=`<div class="history-card"><div class="row"><h3>${x.date}</h3><span class="badge">Full Body ${x.type}</span></div><div class="small" style="margin-bottom:8px">Treadmill: ${x.run||0} min · ${total} ingevulde sets</div>${x.notes?`<p style="font-size:14px; margin:0 0 10px">${escapeHTML(x.notes)}</p>`:""}<div class="actions"><button class="btn danger" onclick="deleteTraining(${idx})">Verwijderen</button></div></div>`});
+}
+
+function deleteTraining(i){let h=load();h.splice(i,1);save(h);renderHistory()}
+function clearHistory(){if(confirm("Alle lokaal opgeslagen trainingen verwijderen?")){localStorage.removeItem(KEY);renderHistory()}}
+
+function exportRows(){
+ const rows=[];
+ load().forEach(t=>t.exercises.forEach(e=>e.sets.forEach(s=>rows.push({Datum:t.date,Schema:"Full Body "+t.type,Treadmill_min:t.run,Oefening:e.name,Variant:e.variant||"-",Set:s.set,Gewicht_kg:s.kg,Herhalingen:s.reps,Notities:t.notes}))));
+ return rows;
+}
+function exportXLSX(){const rows=exportRows();if(!rows.length){alert("Geen trainingsdata om te exporteren.");return}const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,"Trainingen");XLSX.writeFile(wb,"fitness-trainingen.xlsx")}
+function exportTXT(){const h=load();if(!h.length){alert("Geen trainingsdata om te exporteren.");return}let s="FITNESS TRAININGEN\n==================\n\n";h.forEach(t=>{s+=`DATUM: ${t.date}\nSCHEMA: Full Body ${t.type}\nTREADMILL: ${t.run} min\n`;if(t.notes)s+=`NOTITIES: ${t.notes}\n`;t.exercises.forEach(e=>{if(e.sets.length){let vText=e.variant?` [${e.variant}]`:"";s+=`\n${e.name}${vText}\n`;e.sets.forEach(x=>s+=`  Set ${x.set}: ${x.kg||"-"} kg · ${x.reps||"-"} reps\n`)}});s+="\n------------------\n"});download("fitness-trainingen.txt",s,"text/plain")}
+function download(name,data,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
+function escapeHTML(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));b.classList.add("active");current=b.dataset.tab;document.getElementById(current).classList.add("active");if(current==="history")renderHistory()});
+renderPlan("A");renderPlan("B");renderHistory();
+</script>
+</body>
+</html>
