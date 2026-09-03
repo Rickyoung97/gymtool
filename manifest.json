@@ -1,13 +1,15 @@
 {
-  "background_color": "#ffffff",
-  "dir": "ltr",
+  "name": "Fitness Tracker",
+  "short_name": "Fitness",
+  "start_url": "./index.html",
   "display": "standalone",
-  "name": "rickyoung97.github",
-  "orientation": "any",
-  "scope": "/",
-  "short_name": "rickyoung97.github",
-  "start_url": "/",
+  "background_color": "#0b0d10",
   "theme_color": "#0b0d10",
-  "id": "Gymtool",
-  "description": "gymtool"
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
