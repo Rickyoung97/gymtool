@@ -126,7 +126,7 @@ function switchTraining(type){
 function renderTraining(){
  const p=document.getElementById("training");
  p.innerHTML=`<div class="toolbar" style="margin-bottom:14px">
-   <label for="training-select" style="font-weight:700;color:var(--text);font-size:14px"> Kies een trainingsschema:</label>
+   <label for="training-select" style="font-weight:700;color:var(--text);font-size:14px">Kies een trainingsschema:</label>
    <select id="training-select" class="input" style="font-weight:700;font-size:15px;border-color:var(--accent)">
      <option value="A" ${currentTraining==="A"?"selected":""}>🏋️ Full Body A</option>
      <option value="B" ${currentTraining==="B"?"selected":""}>🏋️ Full Body B</option>
@@ -246,7 +246,6 @@ function addVariantToItem(i){const input=document.getElementById(`lib-var-add-${
 function deleteVariantFromItem(itemIdx,varIdx){const lib=getLibrary();if(lib[itemIdx]?.variants){lib[itemIdx].variants.splice(varIdx,1);if(!lib[itemIdx].variants.length)lib[itemIdx].variants=["Standaard"];saveLibrary(lib);renderLibrary()}}
 function deleteLibraryItem(i){openModal("Weet je zeker dat je deze oefening uit de bibliotheek wilt verwijderen?",()=>{const lib=getLibrary();lib.splice(i,1);saveLibrary(lib);renderLibrary()})}
 
-/* Oefening-historie vanuit een training */
 function openExerciseHistory(exId,name){
  switchTab("history");
  renderExerciseHistory(name);
@@ -293,11 +292,15 @@ function renderExerciseHistory(name,preferredVariant=null){
  
  const labels=[],values=[];
  rows.forEach(r=>{const valid=r.sets.filter(s=>s.kg!==""&&s.kg!=null);if(valid.length){labels.push(r.date);values.push(Math.max(...valid.map(s=>parseFloat(s.kg)||0)))}}); 
- if(chartInstance)chartInstance.destroy();
- const ctx=document.getElementById("exerciseChart");
- if(ctx){
-   chartInstance=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:"Max gewicht (kg)",data:values,borderColor:"#d8ad55",backgroundColor:"rgba(216,173,85,0.15)",fill:true,tension:.2}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
- }
+ 
+ if(chartInstance){chartInstance.destroy();chartInstance=null;}
+ setTimeout(()=>{
+   const ctx=document.getElementById("exerciseChart");
+   if(ctx){
+     chartInstance=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:"Max gewicht (kg)",data:values,borderColor:"#d8ad55",backgroundColor:"rgba(216,173,85,0.15)",fill:true,tension:.2}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
+   }
+ },0);
+
  document.getElementById("exercise-history-table").innerHTML=`<div class="history-card"><h4 style="margin:0 0 8px">Historie — ${escapeHTML(active)}</h4>${rows.slice().reverse().map(r=>`<div style="border-bottom:1px solid var(--line);padding:8px 0"><strong>${escapeHTML(r.date)}</strong><div class="small">${r.sets.length?r.sets.map(s=>`${escapeHTML(s.kg\vert{}\vert{}"-")} kg × ${escapeHTML(s.reps||"-")} reps`).join(" · "):"Geen ingevulde sets"}${r.note?`<br>💡 ${escapeHTML(r.note)}`:""}</div></div>`).join("")||`<div class="empty">Geen ingevulde sets voor de gekozen periode.</div>`}</div>`;
 }
 
