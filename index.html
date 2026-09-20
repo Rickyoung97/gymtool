@@ -13,7 +13,7 @@
 .panel{display:none}.panel.active{display:block}.toolbar,.history-card,.exercise,.card-box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
 label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}.input,select,textarea{width:100%;background:#0f1217;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit}textarea{min-height:70px;resize:vertical}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.exercise h3{margin:0;font-size:18px}.exercise .meta{color:var(--muted);font-size:13px;margin:3px 0}.exhead{display:flex;justify-content:space-between;gap:10px;align-items:start}.visual{color:var(--accent);text-decoration:none;font-size:13px;white-space:nowrap;padding:4px 8px;border-radius:6px;background:rgba(216,173,85,.1);border:1px solid rgba(216,173,85,.2)}
-.options{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}.radio-lbl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;background:#0f1217;padding:6px 12px;border-radius:99px;border:1px solid var(--line)}.radio-lbl:has(input:checked){border-color:var(--accent);color:var(--accent);background:rgba(216,173,85,.1)}
+.options{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}.radio-lbl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;background:#0f1217;padding:6px 12px;border-radius:99px;border:1px solid var(--line)}.radio-lbl.selected,.radio-lbl:has(input:checked){border-color:var(--accent);color:var(--accent);background:rgba(216,173,85,.1)}
 input[type=radio]{accent-color:var(--accent);margin:0;cursor:pointer}.sets{display:grid;gap:8px}.setrow{display:grid;grid-template-columns:50px 1fr 1fr;gap:8px;align-items:center}.setnum{color:var(--muted);font-weight:700}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.btn{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:10px;padding:10px 13px;font-weight:700;cursor:pointer}.btn.primary{background:var(--accent);color:#111;border-color:var(--accent)}.btn.danger{color:#ff9b9b;border-color:rgba(255,155,155,.2);background:transparent}.btn.small{padding:6px 10px;font-size:12px;border-radius:8px}
 .small{font-size:12px;color:var(--muted)}.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#242b35;color:#dbe0e6;font-size:12px}.empty{text-align:center;color:var(--muted);padding:20px}.section-title{margin:18px 2px 10px;display:flex;justify-content:space-between;align-items:flex-end}
@@ -84,67 +84,107 @@ const DEFAULT_LIB=[
 {id:"ex_19",name:"Dumbbell biceps curl",cat:"Biceps",guideline:"3×10–12",variants:["Staand","Zittend (Incline)","Preacher bench"]},
 {id:"ex_20",name:"Abdominal crunch",cat:"Buikspieren",guideline:"3×12–20",variants:["Machine","Cable crunch","Matje"]}
 ];
-
 const DEFAULT_PLANS={A:["ex_1","ex_2","ex_3","ex_4","ex_5","ex_6","ex_7"],B:["ex_8","ex_9","ex_10","ex_11","ex_12","ex_13","ex_14"],CUSTOM:[]};
 const KEY_HIST="fitnessTrackerV2_History",KEY_LIB="fitnessTrackerV2_Library",KEY_PLANS="fitnessTrackerV2_Plans",DRAFT_KEY="fitnessDraft_";
 let currentTraining="A",editingIndex=null,chartInstance=null,pendingConfirmAction=null,activeTimeRange="ALL";
 
-function getLibrary(){return JSON.parse(localStorage.getItem(KEY_LIB))||structuredClone(DEFAULT_LIB)}
-function saveLibrary(x){localStorage.setItem(KEY_LIB,JSON.stringify(x))}
-function getPlans(){return JSON.parse(localStorage.getItem(KEY_PLANS))||structuredClone(DEFAULT_PLANS)}
-function savePlans(x){localStorage.setItem(KEY_PLANS,JSON.stringify(x))}
-function loadHistory(){return JSON.parse(localStorage.getItem(KEY_HIST)||"[]")}
-function saveHistory(x){localStorage.setItem(KEY_HIST,JSON.stringify(x))}
-const today=()=>new Date().toISOString().slice(0,10);
+/* Veilige localStorage wrappers - vangt crashes direct op */
+function safeParse(key, fallback) {
+  try {
+    const data = localStorage.getItem(key);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error("Opslagfout hersteld", e);
+  }
+  return JSON.parse(JSON.stringify(fallback));
+}
 
-function getSearchUrl(name,variant){let q=name+(variant&&variant!=="Standaard"?" "+variant:"")+" exercise";return "https://www.google.com/search?q="+encodeURIComponent(q)}
-function openModal(msg,onConfirm){document.getElementById("modal-msg").innerText=msg;pendingConfirmAction=onConfirm;document.getElementById("custom-modal").classList.add("active")}
-function closeModal(){document.getElementById("custom-modal").classList.remove("active");pendingConfirmAction=null}
-document.getElementById("modal-confirm-btn").onclick=()=>{if(pendingConfirmAction)pendingConfirmAction();closeModal()};
+function getLibrary(){ return safeParse(KEY_LIB, DEFAULT_LIB); }
+function saveLibrary(x){ localStorage.setItem(KEY_LIB, JSON.stringify(x)); }
+function getPlans(){ return safeParse(KEY_PLANS, DEFAULT_PLANS); }
+function savePlans(x){ localStorage.setItem(KEY_PLANS, JSON.stringify(x)); }
+function loadHistory(){ return safeParse(KEY_HIST, []); }
+function saveHistory(x){ localStorage.setItem(KEY_HIST, JSON.stringify(x)); }
 
-document.addEventListener("input",e=>{const p=e.target.closest(".subpanel");if(p&&["A","B","CUSTOM"].includes(p.id))saveDraft(p.id)});
-document.addEventListener("change",e=>{
- if(e.target.type==="radio"){const card=e.target.closest(".exercise");if(card){const panel=card.closest(".subpanel");if(panel)updateExerciseCardDynamicData(card,panel.id)}}
- const p=e.target.closest(".subpanel");if(p&&["A","B","CUSTOM"].includes(p.id))saveDraft(p.id)
+const today = () => new Date().toISOString().slice(0, 10);
+function escapeHTML(s) {
+  const str = (s !== undefined && s !== null) ? s.toString() : "";
+  return str.replace(/[&<>"']/g, function(m) {
+    return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"}[m];
+  });
+}
+function escapeAttr(s){ return escapeHTML(s).replace(/`/g, "&#096;"); }
+
+function getSearchUrl(name, variant){ let q = name + (variant && variant !== "Standaard" ? " " + variant : "") + " exercise"; return "https://www.google.com/search?q=" + encodeURIComponent(q); }
+function openModal(msg, onConfirm){ document.getElementById("modal-msg").innerText = msg; pendingConfirmAction = onConfirm; document.getElementById("custom-modal").classList.add("active"); }
+function closeModal(){ document.getElementById("custom-modal").classList.remove("active"); pendingConfirmAction = null; }
+document.getElementById("modal-confirm-btn").onclick = () => { if (pendingConfirmAction) pendingConfirmAction(); closeModal(); };
+
+document.addEventListener("input", e => { 
+  const p = e.target.closest(".subpanel"); 
+  if (p && ["A", "B", "CUSTOM"].includes(p.id)) saveDraft(p.id); 
+});
+
+document.addEventListener("change", e => {
+  if (e.target.type === "radio") {
+    const optionsBlock = e.target.closest(".options");
+    if (optionsBlock) {
+      Array.from(optionsBlock.querySelectorAll(".radio-lbl")).forEach(lbl => lbl.classList.remove("selected"));
+      e.target.closest(".radio-lbl").classList.add("selected");
+    }
+    const card = e.target.closest(".exercise");
+    if (card) {
+      const panel = card.closest(".subpanel");
+      if (panel) updateExerciseCardDynamicData(card, panel.id);
+    }
+  }
+  const p = e.target.closest(".subpanel");
+  if (p && ["A", "B", "CUSTOM"].includes(p.id)) saveDraft(p.id);
 });
 
 function switchTab(name){
- document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
- document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id===name));
- if(name==="training")renderTraining();
- if(name==="library")renderLibrary();
- if(name==="history")renderHistory();
- if(name==="settings")renderSettings();
+ Array.from(document.querySelectorAll(".tab")).forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+ Array.from(document.querySelectorAll(".panel")).forEach(p => p.classList.toggle("active", p.id === name));
+ if (name === "training") renderTraining();
+ if (name === "library") renderLibrary();
+ if (name === "history") renderHistory();
+ if (name === "settings") renderSettings();
 }
 
 function switchTraining(type){
- currentTraining=type;
- document.querySelectorAll(".subpanel").forEach(p=>p.classList.toggle("active",p.id===type));
- if(["A","B","CUSTOM"].includes(type))renderPlan(type);
+ currentTraining = type;
+ Array.from(document.querySelectorAll(".subpanel")).forEach(p => p.classList.toggle("active", p.id === type));
+ if (["A", "B", "CUSTOM"].includes(type)) renderPlan(type);
 }
 
 function renderTraining(){
- const p=document.getElementById("training");
- p.innerHTML=`<div class="toolbar" style="margin-bottom:14px">
+ const p = document.getElementById("training");
+ p.innerHTML = `
+ <div class="toolbar" style="margin-bottom:14px">
    <label for="training-select" style="font-weight:700;color:var(--text);font-size:14px">Kies een trainingsschema:</label>
    <select id="training-select" class="input" style="font-weight:700;font-size:15px;border-color:var(--accent)">
-     <option value="A" ${currentTraining==="A"?"selected":""}>🏋️ Full Body A</option>
-     <option value="B" ${currentTraining==="B"?"selected":""}>🏋️ Full Body B</option>
-     <option value="CUSTOM" ${currentTraining==="CUSTOM"?"selected":""}>⚙️ Custom Training</option>
+     <option value="A" ${currentTraining === "A" ? "selected" : ""}>🏋️ Full Body A</option>
+     <option value="B" ${currentTraining === "B" ? "selected" : ""}>🏋️ Full Body B</option>
+     <option value="CUSTOM" ${currentTraining === "CUSTOM" ? "selected" : ""}>⚙️ Custom Training</option>
    </select>
  </div>
- <div id="A" class="subpanel ${currentTraining==="A"?"active":""}"></div>
- <div id="B" class="subpanel ${currentTraining==="B"?"active":""}"></div>
- <div id="CUSTOM" class="subpanel ${currentTraining==="CUSTOM"?"active":""}"></div>`;
+ <div id="A" class="subpanel ${currentTraining === "A" ? "active" : ""}"></div>
+ <div id="B" class="subpanel ${currentTraining === "B" ? "active" : ""}"></div>
+ <div id="CUSTOM" class="subpanel ${currentTraining === "CUSTOM" ? "active" : ""}"></div>`;
 
- document.getElementById("training-select").onchange=(e)=>switchTraining(e.target.value);
- renderPlan("A");renderPlan("B");renderPlan("CUSTOM");
+ document.getElementById("training-select").onchange = (e) => switchTraining(e.target.value);
+ renderPlan("A"); renderPlan("B"); renderPlan("CUSTOM");
 }
 
 function renderPlan(type){
- const p=document.getElementById(type),plans=getPlans(),lib=getLibrary(),exIds=plans[type]||[];
- const titleMap={A:"Full Body A",B:"Full Body B",CUSTOM:"Custom Training"};
- p.innerHTML=`<div id="${type}-edit-banner" class="edit-banner"></div>
+ const p = document.getElementById(type);
+ const plans = getPlans();
+ const lib = getLibrary();
+ const exIds = plans[type] || [];
+ const titleMap = { A: "Full Body A", B: "Full Body B", CUSTOM: "Custom Training" };
+ 
+ p.innerHTML = `
+ <div id="${type}-edit-banner" class="edit-banner"></div>
  <div class="toolbar"><div class="grid">
  <div><label>Datum training</label><input class="input" id="${type}-date" type="date" value="${today()}"></div>
  <div><label>Treadmill warming-up (minuten)</label><input class="input" id="${type}-run" type="number" inputmode="decimal" min="0" step=".5" value="10"></div></div>
@@ -152,23 +192,36 @@ function renderPlan(type){
  <div class="section-title"><h2 style="margin:0">${titleMap[type]}</h2><div class="small">Auto-save actief 💾</div></div>
  <div id="${type}-exercises"></div>
  <div class="card-box" style="margin-top:15px;border-style:dashed"><h4 style="margin:0 0 8px">+ Oefening toevoegen aan ${titleMap[type]}</h4>
- <div style="display:flex;gap:8px"><select id="${type}-add-select" class="input"><option value="">-- Kies uit bibliotheek --</option>${lib.map(e=>`<option value="${e.id}">${escapeHTML(e.name)} (${escapeHTML(e.cat)})</option>`).join("")}</select>
+ <div style="display:flex;gap:8px"><select id="${type}-add-select" class="input"><option value="">-- Kies uit bibliotheek --</option>
+ ${lib.map(e => `<option value="${e.id}">${escapeHTML(e.name)} (${escapeHTML(e.cat)})</option>`).join("")}</select>
  <button class="btn primary small" onclick="addExerciseToPlan('${type}')">Toevoegen</button></div></div>
  <div class="actions"><button class="btn primary" id="${type}-submit-btn" onclick="finish('${type}')">✓ Training opslaan</button>
  <button class="btn danger" onclick="confirmResetForm('${type}')">Formulier & concept wissen</button></div>`;
- const box=document.getElementById(type+"-exercises");
- exIds.forEach((id,i)=>{const e=lib.find(x=>x.id===id);if(e)box.insertAdjacentHTML("beforeend",exerciseHTML(type,e,i))});
- document.querySelectorAll(`#${type}-exercises .exercise`).forEach(c=>updateExerciseCardDynamicData(c,type));
- if(editingIndex!==null){const h=loadHistory();if(h[editingIndex]&&h[editingIndex].type===type){populateFormWithData(type,h[editingIndex]);showEditBanner(type,h[editingIndex].date);return}}
+ 
+ const box = document.getElementById(type + "-exercises");
+ exIds.forEach((id, i) => {
+   const e = lib.find(x => x.id === id);
+   if (e) box.insertAdjacentHTML("beforeend", exerciseHTML(type, e, i));
+ });
+ Array.from(document.querySelectorAll(`#${type}-exercises .exercise`)).forEach(c => updateExerciseCardDynamicData(c, type));
+ 
+ if (editingIndex !== null) {
+   const h = loadHistory();
+   if (h[editingIndex] && h[editingIndex].type === type) {
+     populateFormWithData(type, h[editingIndex]);
+     showEditBanner(type, h[editingIndex].date);
+     return;
+   }
+ }
  restoreDraft(type);
 }
 
-function exerciseHTML(type,e,i){
- const variants=e.variants?.length?e.variants:["Standaard"];
- const options=variants.map((v,j)=>`<label class="radio-lbl"><input type="radio" name="${type}-var-${i}" value="${escapeAttr(v)}" ${j===0?"checked":""}> ${escapeHTML(v)}</label>`).join("");
+function exerciseHTML(type, e, i){
+ const variants = (e.variants && e.variants.length > 0) ? e.variants : ["Standaard"];
+ const options = variants.map((v, j) => `<label class="radio-lbl ${j === 0 ? "selected" : ""}"><input type="radio" name="${type}-var-${i}" value="${escapeAttr(v)}" ${j === 0 ? "checked" : ""}> ${escapeHTML(v)}</label>`).join("");
  return `<div class="exercise" data-ex-id="${escapeAttr(e.id)}" data-ex-name="${escapeAttr(e.name)}" data-ex-idx="${i}">
- <div class="exhead"><div><h3>${i+1}.${escapeHTML(e.name)}</h3><div class="meta">${escapeHTML(e.cat)} · richtlijn ${escapeHTML(e.guideline||"3x8-12")}</div></div>
- <div style="display:flex;gap:6px;align-items:center"><a class="visual" href="${getSearchUrl(e.name,variants[0])}" target="_blank" rel="noopener">📷 Google</a>
+ <div class="exhead"><div><h3>${i+1}. ${escapeHTML(e.name)}</h3><div class="meta">${escapeHTML(e.cat)} · richtlijn ${escapeHTML(e.guideline || "3x8-12")}</div></div>
+ <div style="display:flex;gap:6px;align-items:center"><a class="visual" href="${getSearchUrl(e.name, variants[0])}" target="_blank" rel="noopener">📷 Google</a>
  <button class="btn small" onclick="openExerciseHistory('${escapeAttr(e.id)}','${escapeAttr(e.name)}')">📈 Historie</button>
  <button class="btn danger small" onclick="removeExerciseFromPlan('${type}',${i})">✕</button></div></div>
  <div class="options">${options}</div>
@@ -176,61 +229,136 @@ function exerciseHTML(type,e,i){
  <div class="reminder-box" id="${type}-reminder-${i}" style="display:none"></div>
  <div class="sets" id="${type}-sets-${i}">${setHTML(0)}${setHTML(1)}</div>
  <div class="actions"><button class="btn small" onclick="addSet('${type}',${i})">＋ Set toevoegen</button><button class="btn danger small" onclick="removeSet('${type}',${i})">− Laatste set</button></div>
- <div style="margin-top:10px"><label>Extra opmerking / Reminder voor volgende keer (per variant)</label><input class="input extra-note" type="text" placeholder="Bijv. volgende keer +2,5 kg"></div></div>`;
+ <div style="margin-top:10px"><label>Extra opmerking / Reminder (per variant)</label><input class="input extra-note" type="text" placeholder="Bijv. volgende keer +2,5 kg"></div></div>`;
 }
 
-function updateExerciseCardDynamicData(card,type){
- const name=card.dataset.exName,radio=card.querySelector("input[type=radio]:checked"),variant=radio?radio.value:"Standaard";
- const link=card.querySelector(".visual");if(link)link.href=getSearchUrl(name,variant);
- const history=loadHistory();let prev="Geen eerdere gegevens voor deze variant.",rem="";
- for(const t of history){const m=(t.exercises||[]).find(e=>e.name===name&&(e.variant===variant||(!e.variant&&variant==="Standaard")));if(m){const sets=(m.sets||[]).filter(s=>s.kg!==""||s.reps!=="");if(sets.length)prev=`Vorige keer (${t.date}):${sets.map(s=>`${s.kg||0}kg × ${s.reps||0}`).join(", ")}`;if(m.extraNote?.trim())rem=m.extraNote;break}}
- const i=card.dataset.exIdx,prevBox=document.getElementById(`${type}-prev-${i}`),remBox=document.getElementById(`${type}-reminder-${i}`);
- if(prevBox)prevBox.innerText=prev;if(remBox){remBox.style.display=rem?"block":"none";remBox.innerHTML=rem?`💡 <strong>Reminder vorige keer:</strong> ${escapeHTML(rem)}`:""}
+function updateExerciseCardDynamicData(card, type){
+ const name = card.dataset.exName;
+ const radio = card.querySelector("input[type=radio]:checked");
+ const variant = radio ? radio.value : "Standaard";
+ const link = card.querySelector(".visual");
+ if (link) link.href = getSearchUrl(name, variant);
+ 
+ const history = loadHistory();
+ let prev = "Geen eerdere gegevens voor deze variant.";
+ let rem = "";
+ 
+ for (let j = 0; j < history.length; j++) {
+   const t = history[j];
+   const exs = t.exercises || [];
+   const m = exs.find(ex => ex.name === name && (ex.variant === variant || (!ex.variant && variant === "Standaard")));
+   if (m) {
+     const sets = (m.sets || []).filter(s => s.kg !== "" || s.reps !== "");
+     if (sets.length > 0) prev = "Vorige keer (" + t.date + "): " + sets.map(s => (s.kg || 0) + "kg × " + (s.reps || 0)).join(", ");
+     if (m.extraNote && m.extraNote.trim() !== "") rem = m.extraNote;
+     break;
+   }
+ }
+ 
+ const idx = card.dataset.exIdx;
+ const prevBox = document.getElementById(`${type}-prev-${idx}`);
+ const remBox = document.getElementById(`${type}-reminder-${idx}`);
+ if (prevBox) prevBox.innerText = prev;
+ if (remBox) {
+   remBox.style.display = rem ? "block" : "none";
+   remBox.innerHTML = rem ? `💡 <strong>Reminder vorige keer:</strong> ${escapeHTML(rem)}` : "";
+ }
 }
 
-function setHTML(n){return `<div class="setrow"><div class="setnum">Set ${n+1}</div><input class="input kg" type="number" inputmode="decimal" min="0" step=".5" placeholder="kg"><input class="input reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps"></div>`}
-function addSet(t,i){const b=document.getElementById(`${t}-sets-${i}`);b.insertAdjacentHTML("beforeend",setHTML(b.children.length));saveDraft(t)}
-function removeSet(t,i){const b=document.getElementById(`${t}-sets-${i}`);if(b.children.length>1){b.lastElementChild.remove();saveDraft(t)}}
-function addExerciseToPlan(t){const s=document.getElementById(`${t}-add-select`);if(!s.value)return;const p=getPlans();p[t].push(s.value);savePlans(p);renderPlan(t)}
-function removeExerciseFromPlan(t,i){const p=getPlans();p[t].splice(i,1);savePlans(p);renderPlan(t)}
+function setHTML(n){ return `<div class="setrow"><div class="setnum">Set ${n+1}</div><input class="input kg" type="number" inputmode="decimal" min="0" step=".5" placeholder="kg"><input class="input reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps"></div>`; }
+function addSet(t, i){ const b = document.getElementById(`${t}-sets-${i}`); b.insertAdjacentHTML("beforeend", setHTML(b.children.length)); saveDraft(t); }
+function removeSet(t, i){ const b = document.getElementById(`${t}-sets-${i}`); if (b.children.length > 1) { b.lastElementChild.remove(); saveDraft(t); } }
+function addExerciseToPlan(t){ const s = document.getElementById(`${t}-add-select`); if (!s.value) return; const p = getPlans(); p[t].push(s.value); savePlans(p); renderPlan(t); }
+function removeExerciseFromPlan(t, i){ const p = getPlans(); p[t].splice(i, 1); savePlans(p); renderPlan(t); }
 
-function collect(t,isDraft=false){
- const out={type:t,date:document.getElementById(t+"-date").value,run:document.getElementById(t+"-run").value,notes:document.getElementById(t+"-notes").value,exercises:[]};
- document.querySelectorAll(`#${t}-exercises .exercise`).forEach(card=>{
-  const radio=card.querySelector("input[type=radio]:checked"),variant=radio?radio.value:"Standaard";
-  let sets=[...card.querySelectorAll(".setrow")].map((r,j)=>({set:j+1,kg:r.querySelector(".kg").value,reps:r.querySelector(".reps").value}));
-  if(!isDraft)sets=sets.filter(s=>s.kg!==""||s.reps!=="");
-  out.exercises.push({name:card.dataset.exName,variant,sets,extraNote:card.querySelector(".extra-note").value});
- });return out;
+function collect(t, isDraft = false){
+ const out = { 
+   type: t, 
+   date: document.getElementById(t + "-date").value, 
+   run: document.getElementById(t + "-run").value, 
+   notes: document.getElementById(t + "-notes").value, 
+   exercises: [] 
+ };
+ Array.from(document.querySelectorAll(`#${t}-exercises .exercise`)).forEach(card => {
+  const radio = card.querySelector("input[type=radio]:checked");
+  const variant = radio ? radio.value : "Standaard";
+  let sets = Array.from(card.querySelectorAll(".setrow")).map((r, j) => ({ set: j+1, kg: r.querySelector(".kg").value, reps: r.querySelector(".reps").value }));
+  if (!isDraft) sets = sets.filter(s => s.kg !== "" || s.reps !== "");
+  out.exercises.push({ name: card.dataset.exName, variant: variant, sets: sets, extraNote: card.querySelector(".extra-note").value });
+ });
+ return out;
 }
-function saveDraft(t){if(editingIndex===null)localStorage.setItem(DRAFT_KEY+t,JSON.stringify(collect(t,true)))}
-function restoreDraft(t){const d=JSON.parse(localStorage.getItem(DRAFT_KEY+t)||"null");if(d)populateFormWithData(t,d)}
-function populateFormWithData(t,d){
- document.getElementById(t+"-date").value=d.date||today();document.getElementById(t+"-run").value=d.run??"10";document.getElementById(t+"-notes").value=d.notes||"";
- document.querySelectorAll(`#${t}-exercises .exercise`).forEach((card,i)=>{const x=d.exercises?.[i];if(!x)return;
-  const r=[...card.querySelectorAll("input[type=radio]")].find(r=>r.value===x.variant);if(r)r.checked=true;
-  card.querySelector(".extra-note").value=x.extraNote||"";const c=document.getElementById(`${t}-sets-${i}`);c.innerHTML="";
-  const sets=x.sets?.length?x.sets:[{kg:"",reps:""},{kg:"",reps:""}];sets.forEach((s,j)=>{c.insertAdjacentHTML("beforeend",setHTML(j));c.children[j].querySelector(".kg").value=s.kg||"";c.children[j].querySelector(".reps").value=s.reps||""});updateExerciseCardDynamicData(card,t)
- })
+
+function saveDraft(t){ if (editingIndex === null) localStorage.setItem(DRAFT_KEY + t, JSON.stringify(collect(t, true))); }
+function restoreDraft(t){ 
+  try {
+    const data = localStorage.getItem(DRAFT_KEY + t);
+    if (data) populateFormWithData(t, JSON.parse(data)); 
+  } catch (e) {
+    localStorage.removeItem(DRAFT_KEY + t);
+  }
 }
-function showEditBanner(t,date){const b=document.getElementById(`${t}-edit-banner`);b.style.display="block";b.innerHTML=`<div class="edit-notice"><span>✏️ <strong>Je bewerkt nu een eerdere training</strong> van <strong>${date}</strong></span><button class="btn small danger" onclick="cancelEdit('${t}')">Bewerken annuleren</button></div>`;document.getElementById(`${t}-submit-btn`).innerHTML="✓ Wijzigingen opslaan"}
-function cancelEdit(t){editingIndex=null;renderPlan(t)}
-function confirmResetForm(t){openModal("Weet je zeker dat je het formulier wilt wissen?",()=>{editingIndex=null;localStorage.removeItem(DRAFT_KEY+t);renderPlan(t)})}
-function finish(t){const d=collect(t,false);if(!d.date)return alert("Vul eerst een datum in.");let h=loadHistory();if(editingIndex!==null&&editingIndex<h.length){h[editingIndex]=d;editingIndex=null;alert("Bewerking succesvol opgeslagen!")}else{h.unshift(d);alert("Training opgeslagen!")}saveHistory(h);localStorage.removeItem(DRAFT_KEY+t);renderPlan(t)}
+function populateFormWithData(t, d){
+ document.getElementById(t + "-date").value = d.date || today();
+ document.getElementById(t + "-run").value = (d.run !== undefined && d.run !== null) ? d.run : "10";
+ document.getElementById(t + "-notes").value = d.notes || "";
+ Array.from(document.querySelectorAll(`#${t}-exercises .exercise`)).forEach((card, i) => {
+  const x = d.exercises ? d.exercises[i] : undefined;
+  if (!x) return;
+  const r = Array.from(card.querySelectorAll("input[type=radio]")).find(rad => rad.value === x.variant);
+  if (r) {
+    r.checked = true;
+    Array.from(card.querySelectorAll(".radio-lbl")).forEach(lbl => lbl.classList.remove("selected"));
+    r.closest(".radio-lbl").classList.add("selected");
+  }
+  card.querySelector(".extra-note").value = x.extraNote || "";
+  const c = document.getElementById(`${t}-sets-${i}`);
+  c.innerHTML = "";
+  const sets = (x.sets && x.sets.length > 0) ? x.sets : [{kg:"", reps:""}, {kg:"", reps:""}];
+  sets.forEach((s, j) => {
+    c.insertAdjacentHTML("beforeend", setHTML(j));
+    c.children[j].querySelector(".kg").value = s.kg || "";
+    c.children[j].querySelector(".reps").value = s.reps || "";
+  });
+  updateExerciseCardDynamicData(card, t);
+ });
+}
+
+function showEditBanner(t, date){ const b = document.getElementById(`${t}-edit-banner`); b.style.display = "block"; b.innerHTML = `<div class="edit-notice"><span>✏️ <strong>Je bewerkt nu een eerdere training</strong> van <strong>${date}</strong></span><button class="btn small danger" onclick="cancelEdit('${t}')">Bewerken annuleren</button></div>`; document.getElementById(`${t}-submit-btn`).innerHTML = "✓ Wijzigingen opslaan"; }
+function cancelEdit(t){ editingIndex = null; renderPlan(t); }
+function confirmResetForm(t){ openModal("Weet je zeker dat je het formulier wilt wissen?", () => { editingIndex = null; localStorage.removeItem(DRAFT_KEY + t); renderPlan(t); }); }
+
+function finish(t){
+ const d = collect(t, false);
+ if (!d.date) return alert("Vul eerst een datum in.");
+ let h = loadHistory();
+ if (editingIndex !== null && editingIndex < h.length) {
+   h[editingIndex] = d;
+   editingIndex = null;
+   alert("Bewerking succesvol opgeslagen!");
+ } else {
+   h.unshift(d);
+   alert("Training opgeslagen!");
+ }
+ saveHistory(h);
+ localStorage.removeItem(DRAFT_KEY + t);
+ renderPlan(t);
+}
 
 function renderLibrary(){
- const p=document.getElementById("library"),lib=getLibrary();
- p.innerHTML=`<div class="toolbar"><h2 style="margin:0 0 6px">Oefeningen Bibliotheek</h2><p class="small">Beheer hier alle beschikbare oefeningen en hun varianten.</p>
+ const p = document.getElementById("library");
+ const lib = getLibrary();
+ p.innerHTML = `<div class="toolbar"><h2 style="margin:0 0 6px">Oefeningen Bibliotheek</h2><p class="small">Beheer hier alle beschikbare oefeningen en hun varianten.</p>
  <div class="card-box" style="background:#0f1217"><h4 style="margin:0 0 10px">Nieuwe oefening toevoegen</h4><div class="grid">
  <input class="input" id="lib-new-name" placeholder="Naam"><input class="input" id="lib-new-cat" placeholder="Categorie"><input class="input" id="lib-new-guide" placeholder="Richtlijn, bijv. 3×8–12"><input class="input" id="lib-new-vars" placeholder="Varianten, kommagescheiden"></div>
  <button class="btn primary small" style="margin-top:10px" onclick="addLibraryItem()">+ Oefening opslaan</button></div></div>
  <div id="lib-list"></div>`;
- const list=document.getElementById("lib-list");
- lib.forEach((item,idx)=>{
-  const varsHtml=(item.variants||["Standaard"]).map((v,vIdx)=>`<span class="tag">${escapeHTML(v)} <span class="del-var" onclick="deleteVariantFromItem(${idx},${vIdx})" title="Variant verwijderen">×</span></span>`).join("");
-  list.insertAdjacentHTML("beforeend",`<div class="history-card">
+ const list = document.getElementById("lib-list");
+ lib.forEach((item, idx) => {
+  const varsHtml = (item.variants || ["Standaard"]).map((v, vIdx) => `<span class="tag">${escapeHTML(v)} <span class="del-var" onclick="deleteVariantFromItem(${idx},${vIdx})" title="Variant verwijderen">×</span></span>`).join("");
+  list.insertAdjacentHTML("beforeend", `<div class="history-card">
     <div class="row"><h3>${escapeHTML(item.name)}</h3><span class="badge">${escapeHTML(item.cat)}</span></div>
-    <div class="small" style="margin:6px 0">Richtlijn: ${escapeHTML(item.guideline||"-")}</div>
+    <div class="small" style="margin:6px 0">Richtlijn: ${escapeHTML(item.guideline || "-")}</div>
     <div style="margin:8px 0"><strong class="small" style="display:block;margin-bottom:4px">Varianten:</strong>${varsHtml}</div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn small" onclick="openExerciseHistory('${escapeAttr(item.id)}','${escapeAttr(item.name)}')">📈 Historie</button>
@@ -241,45 +369,43 @@ function renderLibrary(){
   </div>`);
  });
 }
-function addLibraryItem(){const name=document.getElementById("lib-new-name").value.trim();if(!name)return alert("Vul minimaal een naam in.");const cat=document.getElementById("lib-new-cat").value.trim()||"Algemeen",guide=document.getElementById("lib-new-guide").value.trim()||"3×8–12",raw=document.getElementById("lib-new-vars").value.trim(),variants=raw?raw.split(",").map(x=>x.trim()).filter(Boolean):["Standaard"];const lib=getLibrary();lib.push({id:"ex_"+Date.now(),name,cat,guideline:guide,variants});saveLibrary(lib);renderLibrary()}
-function addVariantToItem(i){const input=document.getElementById(`lib-var-add-${i}`),v=input.value.trim();if(!v)return;const lib=getLibrary();if(!lib[i].variants)lib[i].variants=["Standaard"];if(!lib[i].variants.includes(v))lib[i].variants.push(v);saveLibrary(lib);renderLibrary()}
-function deleteVariantFromItem(itemIdx,varIdx){const lib=getLibrary();if(lib[itemIdx]?.variants){lib[itemIdx].variants.splice(varIdx,1);if(!lib[itemIdx].variants.length)lib[itemIdx].variants=["Standaard"];saveLibrary(lib);renderLibrary()}}
-function deleteLibraryItem(i){openModal("Weet je zeker dat je deze oefening uit de bibliotheek wilt verwijderen?",()=>{const lib=getLibrary();lib.splice(i,1);saveLibrary(lib);renderLibrary()})}
 
-function openExerciseHistory(exId,name){
- switchTab("history");
- renderExerciseHistory(name);
-}
-function setTimeRange(range,name,activeVariant){
- activeTimeRange=range;
- renderExerciseHistory(name,activeVariant);
-}
-function filterDataByRange(rows,range){
- if(!rows.length||range==="ALL")return rows;
- const now=new Date();let cutoff=new Date();
- if(range==="1M"){cutoff.setMonth(now.getMonth()-1)}
- else if(range==="1Y"){cutoff.setFullYear(now.getFullYear()-1)}
- else if(range==="YTD"){cutoff=new Date(now.getFullYear(),0,1)}
- return rows.filter(r=>new Date(r.date)>=cutoff);
+function addLibraryItem(){ const name = document.getElementById("lib-new-name").value.trim(); if (!name) return alert("Vul minimaal een naam in."); const cat = document.getElementById("lib-new-cat").value.trim() || "Algemeen", guide = document.getElementById("lib-new-guide").value.trim() || "3×8–12", raw = document.getElementById("lib-new-vars").value.trim(), variants = raw ? raw.split(",").map(x => x.trim()).filter(Boolean) : ["Standaard"]; const lib = getLibrary(); lib.push({id:"ex_"+Date.now(), name:name, cat:cat, guideline:guide, variants:variants}); saveLibrary(lib); renderLibrary(); }
+function addVariantToItem(i){ const input = document.getElementById(`lib-var-add-${i}`); const v = input.value.trim(); if (!v) return; const lib = getLibrary(); if (!lib[i].variants) lib[i].variants = ["Standaard"]; if (!lib[i].variants.includes(v)) lib[i].variants.push(v); saveLibrary(lib); renderLibrary(); }
+function deleteVariantFromItem(itemIdx, varIdx){ const lib = getLibrary(); if (lib[itemIdx] && lib[itemIdx].variants) { lib[itemIdx].variants.splice(varIdx, 1); if (!lib[itemIdx].variants.length) lib[itemIdx].variants = ["Standaard"]; saveLibrary(lib); renderLibrary(); } }
+function deleteLibraryItem(i){ openModal("Weet je zeker dat je deze oefening uit de bibliotheek wilt verwijderen?", () => { const lib = getLibrary(); lib.splice(i, 1); saveLibrary(lib); renderLibrary(); }); }
+
+function openExerciseHistory(exId, name){ switchTab("history"); renderExerciseHistory(name); }
+function setTimeRange(range, name, activeVariant){ activeTimeRange = range; renderExerciseHistory(name, activeVariant); }
+function filterDataByRange(rows, range){
+ if (!rows.length || range === "ALL") return rows;
+ const now = new Date(); let cutoff = new Date();
+ if (range === "1M") cutoff.setMonth(now.getMonth() - 1);
+ else if (range === "1Y") cutoff.setFullYear(now.getFullYear() - 1);
+ else if (range === "YTD") cutoff = new Date(now.getFullYear(), 0, 1);
+ return rows.filter(r => new Date(r.date) >= cutoff);
 }
 
-function renderExerciseHistory(name,preferredVariant=null){
- const p=document.getElementById("history"),h=loadHistory(),matches=[];
- h.forEach(t=>(t.exercises||[]).forEach(e=>{if(e.name===name)matches.push({date:t.date,variant:e.variant||"Standaard",sets:e.sets||[],note:e.extraNote||""})}));
- const variants=[...new Set(matches.map(x=>x.variant))];
- if(!matches.length){p.innerHTML=`<div class="history-card empty">Nog geen historie voor <strong>${escapeHTML(name)}</strong>.</div>`;return}
- const active=preferredVariant&&variants.includes(preferredVariant)?preferredVariant:variants[0];
+function renderExerciseHistory(name, preferredVariant = null){
+ const p = document.getElementById("history");
+ const h = loadHistory();
+ const matches = [];
+ h.forEach(t => (t.exercises || []).forEach(e => { if (e.name === name) matches.push({date: t.date, variant: e.variant || "Standaard", sets: e.sets || [], note: e.extraNote || ""}); }));
+ const variants = Array.from(new Set(matches.map(x => x.variant)));
+ if (!matches.length) { p.innerHTML = `<div class="history-card empty">Nog geen historie voor <strong>${escapeHTML(name)}</strong>.</div>`; return; }
+ const active = (preferredVariant && variants.includes(preferredVariant)) ? preferredVariant : variants[0];
  
- p.innerHTML=`<div class="toolbar"><h2 style="margin:0 0 6px">📈 ${escapeHTML(name)}</h2><div class="small">Geschiedenis per variant. Klik een variant om alleen die variant te bekijken.</div>
- <div class="variant-picker">${variants.map(v=>`<button class="variant-btn ${v===active?"active":""}" onclick="renderExerciseHistory('${escapeAttr(name)}','${escapeAttr(v)}')">${escapeHTML(v)}</button>`).join("")}</div></div>
+ p.innerHTML = `
+ <div class="toolbar"><h2 style="margin:0 0 6px">📈 ${escapeHTML(name)}</h2><div class="small">Geschiedenis per variant. Klik een variant om alleen die variant te bekijken.</div>
+ <div class="variant-picker">${variants.map(v => `<button class="variant-btn ${v === active ? "active" : ""}" onclick="renderExerciseHistory('${escapeAttr(name)}','${escapeAttr(v)}')">${escapeHTML(v)}</button>`).join("")}</div></div>
  <div class="card-box chart-wrap">
    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
      <span class="small" style="font-weight:700">Maximale Belasting (kg)</span>
      <div style="display:flex;gap:4px">
-       <button class="time-filter-btn ${activeTimeRange==='1M'?'active':''}" onclick="setTimeRange('1M','${escapeAttr(name)}','${escapeAttr(active)}')">1M</button>
-       <button class="time-filter-btn ${activeTimeRange==='YTD'?'active':''}" onclick="setTimeRange('YTD','${escapeAttr(name)}','${escapeAttr(active)}')">YTD</button>
-       <button class="time-filter-btn ${activeTimeRange==='1Y'?'active':''}" onclick="setTimeRange('1Y','${escapeAttr(name)}','${escapeAttr(active)}')">1Y</button>
-       <button class="time-filter-btn ${activeTimeRange==='ALL'?'active':''}" onclick="setTimeRange('ALL','${escapeAttr(name)}','${escapeAttr(active)}')">Alles</button>
+       <button class="time-filter-btn ${activeTimeRange === '1M' ? 'active' : ''}" onclick="setTimeRange('1M','${escapeAttr(name)}','${escapeAttr(active)}')">1M</button>
+       <button class="time-filter-btn ${activeTimeRange === 'YTD' ? 'active' : ''}" onclick="setTimeRange('YTD','${escapeAttr(name)}','${escapeAttr(active)}')">YTD</button>
+       <button class="time-filter-btn ${activeTimeRange === '1Y' ? 'active' : ''}" onclick="setTimeRange('1Y','${escapeAttr(name)}','${escapeAttr(active)}')">1Y</button>
+       <button class="time-filter-btn ${activeTimeRange === 'ALL' ? 'active' : ''}" onclick="setTimeRange('ALL','${escapeAttr(name)}','${escapeAttr(active)}')">Alles</button>
      </div>
    </div>
    <div style="position:relative;height:230px"><canvas id="exerciseChart"></canvas></div>
@@ -287,66 +413,95 @@ function renderExerciseHistory(name,preferredVariant=null){
  <div id="exercise-history-table"></div>
  <div class="actions"><button class="btn" onclick="renderHistory()">← Alle historie</button></div>`;
  
- const allRows=matches.filter(x=>x.variant===active).sort((a,b)=>a.date.localeCompare(b.date));
- const rows=filterDataByRange(allRows,activeTimeRange);
+ const allRows = matches.filter(x => x.variant === active).sort((a, b) => a.date.localeCompare(b.date));
+ const rows = filterDataByRange(allRows, activeTimeRange);
+ const labels = []; const values = [];
  
- const labels=[],values=[];
- rows.forEach(r=>{const valid=r.sets.filter(s=>s.kg!==""&&s.kg!=null);if(valid.length){labels.push(r.date);values.push(Math.max(...valid.map(s=>parseFloat(s.kg)||0)))}}); 
- 
- if(chartInstance){chartInstance.destroy();chartInstance=null;}
- setTimeout(()=>{
-   const ctx=document.getElementById("exerciseChart");
-   if(ctx){
-     chartInstance=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:"Max gewicht (kg)",data:values,borderColor:"#d8ad55",backgroundColor:"rgba(216,173,85,0.15)",fill:true,tension:.2}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
+ rows.forEach(r => {
+   const valid = r.sets.filter(s => s.kg !== "" && s.kg !== null);
+   if (valid.length > 0) {
+     labels.push(r.date);
+     values.push(Math.max(...valid.map(s => parseFloat(s.kg) || 0)));
    }
- },0);
+ }); 
+ 
+ if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+ setTimeout(() => {
+   const ctx = document.getElementById("exerciseChart");
+   if (ctx && typeof Chart !== 'undefined') {
+     chartInstance = new Chart(ctx, {type: "line", data: {labels: labels, datasets: [{label: "Max gewicht (kg)", data: values, borderColor: "#d8ad55", backgroundColor: "rgba(216,173,85,0.15)", fill: true, tension: .2}]}, options: {responsive: true, maintainAspectRatio: false, scales: {y: {beginAtZero: true}}}});
+   }
+ }, 0);
 
- document.getElementById("exercise-history-table").innerHTML=`<div class="history-card"><h4 style="margin:0 0 8px">Historie — ${escapeHTML(active)}</h4>${rows.slice().reverse().map(r=>`<div style="border-bottom:1px solid var(--line);padding:8px 0"><strong>${escapeHTML(r.date)}</strong><div class="small">${r.sets.length?r.sets.map(s=>`${escapeHTML(s.kg\vert{}\vert{}"-")} kg × ${escapeHTML(s.reps||"-")} reps`).join(" · "):"Geen ingevulde sets"}${r.note?`<br>💡 ${escapeHTML(r.note)}`:""}</div></div>`).join("")||`<div class="empty">Geen ingevulde sets voor de gekozen periode.</div>`}</div>`;
+ document.getElementById("exercise-history-table").innerHTML = `<div class="history-card"><h4 style="margin:0 0 8px">Historie — ${escapeHTML(active)}</h4>
+ ${rows.slice().reverse().map(r => `<div style="border-bottom:1px solid var(--line);padding:8px 0"><strong>${escapeHTML(r.date)}</strong><div class="small">${r.sets.length ? r.sets.map(s => `${escapeHTML(s.kg || "-")} kg × ${escapeHTML(s.reps || "-")} reps`).join(" · ") : "Geen ingevulde sets"}${r.note ? `<br>💡 ${escapeHTML(r.note)}` : ""}</div></div>`).join("") || `<div class="empty">Geen ingevulde sets voor de gekozen periode.</div>`}</div>`;
 }
 
 function renderHistory(){
- const p=document.getElementById("history"),h=loadHistory(),names=[...new Set(h.flatMap(t=>(t.exercises||[]).map(e=>e.name)))];
- p.innerHTML=`<div class="toolbar"><h2 style="margin:0 0 6px">Historie & Grafieken</h2><label>Kies een oefening</label>
- <select class="input" id="history-ex-select"><option value="">-- Kies een oefening --</option>${names.map(n=>`<option value="${escapeAttr(n)}">${escapeHTML(n)}</option>`).join("")}</select>
+ const p = document.getElementById("history");
+ const h = loadHistory();
+ const names = Array.from(new Set(h.reduce((acc, t) => acc.concat((t.exercises || []).map(e => e.name)), [])));
+ p.innerHTML = `<div class="toolbar"><h2 style="margin:0 0 6px">Historie & Grafieken</h2><label>Kies een oefening</label>
+ <select class="input" id="history-ex-select"><option value="">-- Kies een oefening --</option>${names.map(n => `<option value="${escapeAttr(n)}">${escapeHTML(n)}</option>`).join("")}</select>
  <div id="history-variant-area"></div></div><div id="full-history-list"></div>`;
- const s=document.getElementById("history-ex-select");s.onchange=()=>{if(s.value)renderExerciseHistory(s.value);};renderFullHistoryList();
+ const s = document.getElementById("history-ex-select");
+ s.onchange = () => { if (s.value) renderExerciseHistory(s.value); };
+ renderFullHistoryList();
 }
-function renderFullHistoryList(){
- const c=document.getElementById("full-history-list"),h=loadHistory();if(!h.length){c.innerHTML=`<div class="history-card empty">Nog geen trainingen opgeslagen.</div>`;return}
- c.innerHTML=h.map((x,idx)=>{const total=(x.exercises||[]).reduce((a,e)=>a+(e.sets?.length||0),0),sum=(x.exercises||[]).filter(e=>e.sets?.length).map(e=>`• ${escapeHTML(e.name)}${e.variant?` (${escapeHTML(e.variant)})`:""}: ${e.sets.length} set(s)`).join("<br>");
- return `<div class="history-card"><div class="row"><h3>${escapeHTML(x.date)}</h3><span class="badge">${x.type==="CUSTOM"?"Custom Training":"Full Body "+x.type}</span></div><div class="small">Treadmill: ${x.run||0} min · ${total} ingevulde sets</div>${x.notes?`<p class="small" style="font-style:italic">"${escapeHTML(x.notes)}"</p>`:""}<div class="small" style="line-height:1.5;margin:8px 0 12px">${sum}</div>
- <div class="actions"><button class="btn primary small" onclick="editTraining(${idx})">✏️ Bewerken</button><button class="btn danger small" onclick="deleteTraining(${idx})">Verwijderen</button></div></div>`}).join("");
-}
-function editTraining(i){const h=loadHistory(),item=h[i];if(!item)return;editingIndex=i;switchTab("training");switchTraining(item.type);window.scrollTo({top:0,behavior:"smooth"})}
-function deleteTraining(i){openModal("Weet je zeker dat je deze training wilt verwijderen uit je historie?",()=>{let h=loadHistory();h.splice(i,1);saveHistory(h);renderHistory()})}
 
-/* Instellingen / exports */
-function getBackupData(){return{history:loadHistory(),library:getLibrary(),plans:getPlans(),exportedAt:new Date().toISOString()}}
+function renderFullHistoryList(){
+ const c = document.getElementById("full-history-list");
+ const h = loadHistory();
+ if (!h.length) { c.innerHTML = `<div class="history-card empty">Nog geen trainingen opgeslagen.</div>`; return; }
+ c.innerHTML = h.map((x, idx) => {
+   const total = (x.exercises || []).reduce((a, e) => a + (e.sets ? e.sets.length : 0), 0);
+   const sum = (x.exercises || []).filter(e => e.sets && e.sets.length).map(e => `• ${escapeHTML(e.name)}${e.variant ? ` (${escapeHTML(e.variant)})` : ""}: ${e.sets.length} set(s)`).join("<br>");
+   return `<div class="history-card"><div class="row"><h3>${escapeHTML(x.date)}</h3><span class="badge">${x.type === "CUSTOM" ? "Custom Training" : "Full Body " + x.type}</span></div><div class="small">Treadmill: ${x.run || 0} min · ${total} ingevulde sets</div>${x.notes ? `<p class="small" style="font-style:italic">"${escapeHTML(x.notes)}"</p>` : ""}<div class="small" style="line-height:1.5;margin:8px 0 12px">${sum}</div>
+   <div class="actions"><button class="btn primary small" onclick="editTraining(${idx})">✏️ Bewerken</button><button class="btn danger small" onclick="deleteTraining(${idx})">Verwijderen</button></div></div>`;
+ }).join("");
+}
+
+function editTraining(i){ const h = loadHistory(); const item = h[i]; if (!item) return; editingIndex = i; switchTab("training"); switchTraining(item.type); window.scrollTo({top: 0, behavior: "smooth"}); }
+function deleteTraining(i){ openModal("Weet je zeker dat je deze training wilt verwijderen uit je historie?", () => { let h = loadHistory(); h.splice(i, 1); saveHistory(h); renderHistory(); }); }
+
+function getBackupData(){ return { history: loadHistory(), library: getLibrary(), plans: getPlans(), exportedAt: new Date().toISOString() }; }
 function renderSettings(){
- const p=document.getElementById("settings");
- p.innerHTML=`<div class="toolbar"><h2 style="margin:0 0 10px">Instellingen & Back-ups</h2>
+ const p = document.getElementById("settings");
+ p.innerHTML = `<div class="toolbar"><h2 style="margin:0 0 10px">Instellingen & Back-ups</h2>
  <div class="card-box"><h3>Data exporteren</h3><p class="small">Exporteer je trainingsdata.</p><div class="actions"><button class="btn primary" onclick="exportXLSX()">⬇ Excel (.xlsx)</button><button class="btn" onclick="exportTXT()">⬇ Tekst (.txt)</button></div></div>
  <div class="card-box"><h3>Volledige back-up & herstel</h3><p class="small">Maak een volledige JSON-back-up of laad er één in.</p><div class="actions"><button class="btn primary" onclick="exportJSONBackup()">⬇ Reservekopie maken (.json)</button><button class="btn" onclick="emailJSONBackup()">✉️ JSON per mail versturen</button></div>
  <p class="small" style="margin-top:10px">De JSON wordt rechtstreeks in de e-mailtekst gezet, niet als bijlage. De mail wordt geopend in je standaard e-mailapp.</p>
  <label>Back-up bestand inladen (.json)</label><input type="file" id="import-file" class="input" accept=".json" onchange="importJSONBackup(event)"></div>
  <div class="card-box" style="border-color:rgba(227,109,109,.3)"><h3 style="color:var(--danger)">Gevarenzone</h3><p class="small">Wis alle opgeslagen geschiedenis en reset de applicatie naar de fabrieksinstellingen.</p><button class="btn danger" onclick="clearAllData()">⚠️ Alle gegevens wissen</button></div></div>`;
 }
-function exportJSONBackup(){download(`fitness-tracker-backup-${today()}.json`,JSON.stringify(getBackupData(),null,2),"application/json")}
-function emailJSONBackup(){
- const json=JSON.stringify(getBackupData(),null,2),subject=`gymtoolbackup ${today()}`,body=`GymTool backup — ${today()}\n\nHieronder staat de volledige JSON-back-up:\n\n${json}`;
- const url=`mailto:rickyoung1997@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
- window.location.href=url;
-}
-function importJSONBackup(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=x=>{try{const d=JSON.parse(x.target.result);if(d.history&&d.library&&d.plans){saveHistory(d.history);saveLibrary(d.library);savePlans(d.plans);alert("Back-up succesvol ingeladen!");location.reload()}else alert("Ongeldig back-up bestand.")}catch(err){alert("Fout bij het lezen van het bestand: "+err.message)}};r.readAsText(f)}
-function clearAllData(){openModal("Weet je HEEL zeker dat je ALLE gegevens wilt wissen?",()=>{localStorage.clear();location.reload()})}
-function exportRows(){const rows=[];loadHistory().forEach(t=>(t.exercises||[]).forEach(e=>(e.sets||[]).forEach(s=>rows.push({Datum:t.date,Schema:t.type,Treadmill_min:t.run,Oefening:e.name,Variant:e.variant||"-",Set:s.set,Gewicht_kg:s.kg,Herhalingen:s.reps,Reminder_Opmerking:e.extraNote||"",Notities:t.notes}))));return rows}
-function exportXLSX(){const rows=exportRows();if(!rows.length)return alert("Geen trainingsdata om te exporteren.");const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,"Trainingen");XLSX.writeFile(wb,"fitness-trainingen.xlsx")}
-function exportTXT(){const h=loadHistory();if(!h.length)return alert("Geen trainingsdata om te exporteren.");let s="FITNESS TRAININGEN\n==================\n\n";h.forEach(t=>{s+=`DATUM: ${t.date}\nSCHEMA: ${t.type}\nTREADMILL:${t.run} min\n`;if(t.notes)s+=`NOTITIES: ${t.notes}\n`;t.exercises.forEach(e=>{if(e.sets?.length){s+=`\n${e.name}${e.variant?` [${e.variant}]`:""}\n`;if(e.extraNote)s+=`  Reminder: ${e.extraNote}\n`;e.sets.forEach(x=>s+=`  Set ${x.set}: ${x.kg\vert{}\vert{}"-"} kg · ${x.reps||"-"} reps\n`)}});s+="\n------------------\n"});download("fitness-trainingen.txt",s,"text/plain")}
-function download(name,data,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-function escapeHTML(s){return(s??"").toString().replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-function escapeAttr(s){return escapeHTML(s).replace(/`/g,"&#096;")}
 
-document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+function exportJSONBackup(){ download("fitness-tracker-backup-" + today() + ".json", JSON.stringify(getBackupData(), null, 2), "application/json"); }
+function emailJSONBackup(){
+ const json = JSON.stringify(getBackupData(), null, 2);
+ const subject = "gymtoolbackup " + today();
+ const body = "GymTool backup — " + today() + "\n\nHieronder staat de volledige JSON-back-up:\n\n" + json;
+ const url = "mailto:?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+ window.location.href = url;
+}
+function importJSONBackup(e){ const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = x => { try { const d = JSON.parse(x.target.result); if (d.history && d.library && d.plans) { saveHistory(d.history); saveLibrary(d.library); savePlans(d.plans); alert("Back-up succesvol ingeladen!"); location.reload(); } else alert("Ongeldig back-up bestand."); } catch (err) { alert("Fout bij het lezen van het bestand: " + err.message); } }; r.readAsText(f); }
+function clearAllData(){ openModal("Weet je HEEL zeker dat je ALLE gegevens wilt wissen?", () => { localStorage.clear(); location.reload(); }); }
+
+function exportRows(){
+ const rows = [];
+ loadHistory().forEach(t => {
+   (t.exercises || []).forEach(e => {
+     (e.sets || []).forEach(s => {
+       rows.push({Datum: t.date, Schema: t.type, Treadmill_min: t.run, Oefening: e.name, Variant: e.variant || "-", Set: s.set, Gewicht_kg: s.kg, Herhalingen: s.reps, Reminder_Opmerking: e.extraNote || "", Notities: t.notes});
+     });
+   });
+ });
+ return rows;
+}
+function exportXLSX(){ if (typeof XLSX === 'undefined') return alert("Excel export bibliotheek niet geladen (check je verbinding)."); const rows = exportRows(); if (!rows.length) return alert("Geen trainingsdata om te exporteren."); const wb = XLSX.utils.book_new(), ws = XLSX.utils.json_to_sheet(rows); XLSX.utils.book_append_sheet(wb, ws, "Trainingen"); XLSX.writeFile(wb, "fitness-trainingen.xlsx"); }
+function exportTXT(){ const h = loadHistory(); if (!h.length) return alert("Geen trainingsdata om te exporteren."); let s = "FITNESS TRAININGEN\n==================\n\n"; h.forEach(t => { s += `DATUM: ${t.date}\nSCHEMA: ${t.type}\nTREADMILL: ${t.run} min\n`; if (t.notes) s += `NOTITIES: ${t.notes}\n`; t.exercises.forEach(e => { if (e.sets && e.sets.length) { s += `\n${e.name}${e.variant ? ` [${e.variant}]` : ""}\n`; if (e.extraNote) s += `  Reminder: ${e.extraNote}\n`; e.sets.forEach(x => s += `  Set ${x.set}: ${x.kg || "-"} kg · ${x.reps || "-"} reps\n`); } }); s += "\n------------------\n"; }); download("fitness-trainingen.txt", s, "text/plain"); }
+function download(name, data, type){ const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], {type: type})); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+
+Array.from(document.querySelectorAll(".tab")).forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 renderTraining();
 </script>
 </body>
